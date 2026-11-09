@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0f12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Kymatik - Verden i Bevægelse</title>
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --panel: rgba(18, 22, 28, 0.92);
+      --border: rgba(212, 155, 53, 0.26);
+      --ochre: #d49b35;
+      --cyan: #5ce1e6;
+      --cream: #f3ede2;
+      --muted: #8c96a5;
+      --danger: #e05252;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg); color: var(--cream);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none;
+    }
+    #app {
+      display: flex; flex-direction: column;
+      width: 100vw; height: 100vh;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 8px;
+      padding: 10px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--ochre);
+      box-shadow: 0 0 12px var(--ochre);
+    }
+    .brand h1 { font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cream); }
+    .telemetry {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+    }
+    .stat-pill {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 4px 8px; border-radius: 6px;
+    }
+    .stat-pill span { color: var(--ochre); font-weight: 700; }
+    main {
+      position: relative; flex: 1; display: flex;
+      align-items: center; justify-content: center;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #151921 0%, #090b0e 100%);
+    }
+    canvas#cymaticsCanvas {
+      max-width: 96vmin; max-height: 96vmin;
+      width: 100%; height: 100%;
+      touch-action: none;
+    }
+    .bottom-dock {
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      padding: 10px 14px;
+      z-index: 10;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+    .tab-btn, .action-btn, .mode-btn {
+      background: rgba(255,255,255,0.05);
+      color: var(--cream);
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 7px 11px; border-radius: 7px;
+      font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .tab-btn.active, .mode-btn.active, .action-btn.active {
+      background: rgba(212, 155, 53, 0.22);
+      border-color: var(--ochre);
+      color: var(--ochre);
+    }
+    .action-btn.mic-on {
+      background: rgba(224, 82, 82, 0.22);
+      border-color: var(--danger);
+      color: #ff9494;
+    }
+    .tab-panel { display: none; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: center; }
+    .tab-panel.active { display: grid; }
+    .ctrl-group { display: flex; flex-direction: column; gap: 4px; font-size: 0.74rem; color: var(--muted); }
+    .ctrl-group label { display: flex; justify-content: space-between; }
+    .ctrl-group label b { color: var(--cream); }
+    input[type="range"] { width: 100%; accent-color: var(--ochre); }
+    select {
+      background: #171b22; color: var(--cream);
+      border: 1px solid rgba(255,255,255,0.18);
+      padding: 6px 8px; border-radius: 6px; font-size: 0.78rem;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="brand-dot" id="statusDot"></div>
+      <h1>Kymatik — Verden i Bevægelse</h1>
+    </div>
+    <div class="telemetry">
+      <div class="stat-pill">f0: <span id="f0Val">136.1 Hz</span> (<span id="noteVal">C#3</span>)</div>
+      <div class="stat-pill">Overtone: <span id="f1Val">272 Hz</span></div>
+      <div class="stat-pill">Knuder: <span id="nmVal">n=3, m=4</span></div>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <button class="action-btn" id="micBtn">🎤 Mikrofon</button>
+      <button class="action-btn" id="synthBtn">🔊 Drone-Synth</button>
+      <button class="action-btn" id="snapBtn">📸 Gem PNG</button>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="cymaticsCanvas" width="900" height="900"></canvas>
+  </main>
+
+  <section class="bottom-dock">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-audio">1. Lyd & Synth</button>
+      <button class="tab-btn" data-tab="tab-visual">2. Plade & Palet</button>
+      <button class="tab-btn" data-tab="tab-lab">3. Klang-Lab</button>
+      <div style="flex:1"></div>
+      <button class="mode-btn active" data-mode="sand">Kvartssand</button>
+      <button class="mode-btn" data-mode="water">Faraday Vand</button>
+      <button class="mode-btn" data-mode="mandala">Mandala</button>
+      <button class="mode-btn" data-mode="hyper4d">4D Tesserakt</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-audio">
+      <div class="ctrl-group">
+        <label>Grundfrekvens <b id="freqLbl">136.1 Hz</b></label>
+        <input type="range" id="freqSlider" min="40" max="960" step="0.5" value="136.1" />
+      </div>
+      <div class="ctrl-group">
+        <label>Harmonisk Interval</label>
+        <select id="harmonicSelect">
+          <option value="1">Unison (1:1)</option>
+          <option value="1.5" selected>Ren Kvint (3:2)</option>
+          <option value="2">Oktav (2:1)</option>
+          <option value="1.6180339">Gyldent Snit φ (1.618)</option>
+          <option value="2.75">Didgeridoo Formant</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Binaural Fase Δf <b id="beatLbl">1.5 Hz</b></label>
+        <input type="range" id="beatSlider" min="0" max="12" step="0.1" value="1.5" />
+      </div>
+      <div class="ctrl-group">
+        <label>Følsomhed / Drive <b id="gainLbl">1.4x</b></label>
+        <input type="range" id="gainSlider" min="0.2" max="4.0" step="0.1" value="1.4" />
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-visual">
+      <div class="ctrl-group">
+        <label>Plade-Geometri</label>
+        <select id="plateShape">
+          <option value="circle" selected>Cirkulær Membran</option>
+          <option value="square">Kvadratisk Chladni-Plade</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Farvepalet</label>
+        <select id="paletteSelect">
+          <option value="ochre" selected>Okker & Antracit</option>
+          <option value="crystal">Krystalblå & Midnat</option>
+          <option value="moss">Mosgrøn & Rav</option>
+          <option value="bio">Bioluminescens</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Sand-partikler <b id="partLbl">10.000</b></label>
+        <input type="range" id="partSlider" min="2000" max="18000" step="1000" value="10000" />
+      </div>
+      <div class="ctrl-group">
+        <label>Ryst Plade</label>
+        <button class="action-btn" id="scatterBtn">🌪️ Spred Sand på ny</button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-lab">
+      <div class="ctrl-group">
+        <label>Kalibrering</label>
+        <select id="lockMode">
+          <option value="auto" selected>Lyd-drevet Resonans (Auto)</option>
+          <option value="manual">Manuel (n, m) Lås</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Knudetal n <b id="nLbl">3</b></label>
+        <input type="range" id="nSlider" min="1" max="14" step="1" value="3" />
+      </div>
+      <div class="ctrl-group">
+        <label>Knudetal m <b id="mLbl">4</b></label>
+        <input type="range" id="mSlider" min="1" max="14" step="1" value="4" />
+      </div>
+      <div class="ctrl-group">
+        <label>Dæmpnings-pinde (Hold Shift / Dobbeltklik)</label>
+        <button class="action-btn" id="clearPinsBtn">📍 Ryd Dæmpnings-pinde</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+
+const canvas = document.getElementById('cymaticsCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height, CX = W / 2, CY = H / 2, R = W * 0.45;
+
+const PALETTES = {
+  ochre:   { pri: '#d49b35', sec: '#f3ede2', acc: '#5ce1e6' },
+  crystal: { pri: '#5ce1e6', sec: '#d8f3ff', acc: '#7b61ff' },
+  moss:    { pri: '#7cb56b', sec: '#e6c26e', acc: '#d49b35' },
+  bio:     { pri: '#00f5d4', sec: '#f15bb5', acc: '#fee440' }
+};
+
+let state = {
+  mode: 'sand',
+  plateShape: 'circle',
+  palette: 'ochre',
+  freq: 136.1,
+  f1: 272.2,
+  harmonicRatio: 1.5,
+  beatHz: 1.5,
+  gain: 1.4,
+  n: 3,
+  m: 4,
+  lockMode: 'auto',
+  micActive: false,
+  synthActive: false,
+  phase: 0,
+  pins: []
+};
+
+// Particles
+let numParticles = 10000;
+let px = new Float32Array(18000);
+let py = new Float32Array(18000);
+
+function scatterParticles() {
+  for (let i = 0; i < 18000; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * R * 0.96;
+    px[i] = CX + Math.cos(a) * r;
+    py[i] = CY + Math.sin(a) * r;
+  }
+}
+scatterParticles();
+
+// Audio Engine
+let audioCtx = null, analyser = null, micStream = null, osc1 = null, osc2 = null, synthGain = null;
+const fftData = new Uint8Array(2048);
+
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 4096;
+    analyser.smoothingTimeConstant = 0.82;
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+async function toggleMic() {
+  ensureAudio();
+  const btn = document.getElementById('micBtn');
+  if (state.micActive) {
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    state.micActive = false;
+    btn.classList.remove('mic-on');
+    btn.textContent = '🎤 Mikrofon';
+    return;
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const src = audioCtx.createMediaStreamSource(micStream);
+    src.connect(analyser);
+    state.micActive = true;
+    btn.classList.add('mic-on');
+    btn.textContent = '⏹ Stop Mikrofon';
+  } catch (err) {
+    alert('Kunne ikke åbne mikrofonen. Tjek tilladelser.');
+  }
+}
+
+function toggleSynth() {
+  ensureAudio();
+  const btn = document.getElementById('synthBtn');
+  if (state.synthActive) {
+    if (osc1) { osc1.stop(); osc1.disconnect(); osc1 = null; }
+    if (osc2) { osc2.stop(); osc2.disconnect(); osc2 = null; }
+    state.synthActive = false;
+    btn.classList.remove('active');
+    return;
+  }
+  synthGain = audioCtx.createGain();
+  synthGain.gain.value = 0.22;
+  osc1 = audioCtx.createOscillator();
+  osc2 = audioCtx.createOscillator();
+  osc1.type = 'sine';
+  osc2.type = 'triangle';
+  osc1.frequency.value = state.freq;
+  osc2.frequency.value = state.freq * state.harmonicRatio + state.beatHz;
+  osc1.connect(synthGain);
+  osc2.connect(synthGain);
+  synthGain.connect(analyser);
+  synthGain.connect(audioCtx.destination);
+  osc1.start();
+  osc2.start();
+  state.synthActive = true;
+  btn.classList.add('active');
+}
+
+function updateSynthFreqs() {
+  if (state.synthActive && osc1 && osc2) {
+    osc1.frequency.setTargetAtTime(state.freq, audioCtx.currentTime, 0.04);
+    osc2.frequency.setTargetAtTime(state.freq * state.harmonicRatio + state.beatHz, audioCtx.currentTime, 0.04);
+  }
+}
+
+function freqToNote(f) {
+  const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const midi = Math.round(12 * Math.log2(f / 440) + 69);
+  const note = notes[((midi % 12) + 12) % 12];
+  const oct = Math.floor(midi / 12) - 1;
+  return note + oct;
+}
+
+function chladniField(nx, ny, n, m, phase) {
+  const val = Math.cos(n * Math.PI * nx + phase * 0.25) * Math.cos(m * Math.PI * ny) -
+              Math.cos(m * Math.PI * nx) * Math.cos(n * Math.PI * ny - phase * 0.25);
+  for (let p of state.pins) {
+    const dx = nx - p.x, dy = ny - p.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < 0.04) return val * (d2 / 0.04);
+  }
+  return val;
+}
+
+function analyzeAudio() {
+  if ((state.micActive || state.synthActive) && analyser) {
+    analyser.getByteFrequencyData(fftData);
+    let maxVal = 0, maxIdx = 1, secVal = 0, secIdx = 2;
+    const binHz = audioCtx.sampleRate / analyser.fftSize;
+    const minBin = Math.max(1, Math.floor(40 / binHz));
+    const maxBin = Math.min(fftData.length - 1, Math.floor(1600 / binHz));
+    for (let i = minBin; i <= maxBin; i++) {
+      if (fftData[i] > maxVal) {
+        secVal = maxVal; secIdx = maxIdx;
+        maxVal = fftData[i]; maxIdx = i;
+      } else if (fftData[i] > secVal && Math.abs(i - maxIdx) > 4) {
+        secVal = fftData[i]; secIdx = i;
+      }
+    }
+    if (maxVal > 28 && state.micActive) {
+      state.freq = state.freq * 0.82 + (maxIdx * binHz) * 0.18;
+      state.f1 = secIdx * binHz;
+    } else {
+      state.f1 = state.freq * state.harmonicRatio;
+    }
+  } else {
+    state.f1 = state.freq * state.harmonicRatio;
+  }
+
+  if (state.lockMode === 'auto') {
+    state.n = Math.max(1, Math.min(14, Math.round((state.freq / 65) % 12) + 1));
+    state.m = Math.max(1, Math.min(14, Math.round((state.f1 / 85) % 13) + 2));
+    if (state.n === state.m) state.m = (state.m % 13) + 1;
+  }
+
+  document.getElementById('f0Val').textContent = state.freq.toFixed(1) + ' Hz';
+  document.getElementById('noteVal').textContent = freqToNote(state.freq);
+  document.getElementById('f1Val').textContent = Math.round(state.f1) + ' Hz';
+  document.getElementById('nmVal').textContent = `n=${state.n}, m=${state.m}`;
+}
+
+function renderFrame() {
+  analyzeAudio();
+  state.phase += 0.015 * (1 + state.beatHz * 0.35);
+  const pal = PALETTES[state.palette];
+
+  ctx.fillStyle = 'rgba(13, 15, 18, 0.24)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Plate boundary
+  ctx.save();
+  ctx.strokeStyle = 'rgba(212, 155, 53, 0.35)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  if (state.plateShape === 'circle') {
+    ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  } else {
+    ctx.rect(CX - R, CY - R, R * 2, R * 2);
+  }
+  ctx.stroke();
+
+  if (state.mode === 'sand') {
+    ctx.fillStyle = pal.pri;
+    const step = 0.008 * state.gain;
+    for (let i = 0; i < numParticles; i++) {
+      let nx = (px[i] - CX) / R;
+      let ny = (py[i] - CY) / R;
+      const v = Math.abs(chladniField(nx, ny, state.n, state.m, state.phase));
+      if (v > 0.03) {
+        const gx = Math.abs(chladniField(nx + 0.01, ny, state.n, state.m, state.phase)) - v;
+        const gy = Math.abs(chladniField(nx, ny + 0.01, state.n, state.m, state.phase)) - v;
+        nx -= gx * 3.8 * state.gain + (Math.random() - 0.5) * step * v;
+        ny -= gy * 3.8 * state.gain + (Math.random() - 0.5) * step * v;
+      } else {
+        nx += (Math.random() - 0.5) * 0.002;
+        ny += (Math.random() - 0.5) * 0.002;
+      }
+      if (state.plateShape === 'circle') {
+        const r2 = nx * nx + ny * ny;
+        if (r2 > 0.96) { const s = 0.94 / Math.sqrt(r2); nx *= s; ny *= s; }
+      } else {
+        nx = Math.max(-0.96, Math.min(0.96, nx));
+        ny = Math.max(-0.96, Math.min(0.96, ny));
+      }
+      px[i] = CX + nx * R;
+      py[i] = CY + ny * R;
+      ctx.fillRect(px[i], py[i], 1.9, 1.9);
+    }
+  } else if (state.mode === 'water') {
+    for (let ring = 12; ring < R; ring += 10) {
+      ctx.beginPath();
+      ctx.strokeStyle = ring % 20 === 0 ? pal.pri : pal.acc;
+      ctx.lineWidth = 1.6;
+      for (let a = 0; a <= Math.PI * 2 + 0.05; a += 0.04) {
+        const wave = Math.sin(a * state.n + state.phase) * Math.cos(ring * 0.04 * state.m - state.phase * 2);
+        const rr = ring + wave * 9 * state.gain;
+        const x = CX + Math.cos(a) * rr;
+        const y = CY + Math.sin(a) * rr;
+        a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  } else if (state.mode === 'mandala') {
+    ctx.beginPath();
+    ctx.strokeStyle = pal.pri;
+    ctx.lineWidth = 1.8;
+    const petals = state.n * state.m;
+    for (let t = 0; t < Math.PI * 2; t += 0.005) {
+      const rad = R * 0.92 * Math.cos(state.n * t + state.phase) * Math.sin(state.m * t - state.phase * 0.5);
+      const x = CX + rad * Math.cos(t);
+      const y = CY + rad * Math.sin(t);
+      t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  } else if (state.mode === 'hyper4d') {
+    const verts = [];
+    for (let i = 0; i < 16; i++) {
+      let x = (i & 1) ? 1 : -1, y = (i & 2) ? 1 : -1, z = (i & 4) ? 1 : -1, w = (i & 8) ? 1 : -1;
+      const a1 = state.phase * 0.7, a2 = state.phase * 0.4 * state.harmonicRatio;
+      let xw = x * Math.cos(a1) - w * Math.sin(a1);
+      let ww = x * Math.sin(a1) + w * Math.cos(a1);
+      let yz = y * Math.cos(a2) - z * Math.sin(a2);
+      let zz = y * Math.sin(a2) + z * Math.cos(a2);
+      const d4 = 2.8 / (2.8 - ww * 0.65);
+      const d3 = 2.8 / (2.8 - zz * 0.55);
+      const scale = R * 0.25 * d4 * d3 * (1 + 0.08 * Math.sin(state.n * i));
+      verts.push([CX + xw * scale, CY + yz * scale]);
+    }
+    ctx.strokeStyle = pal.pri;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 16; i++) {
+      for (let j = i + 1; j < 16; j++) {
+        const diff = i ^ j;
+        if ((diff & (diff - 1)) === 0) {
+          ctx.beginPath();
+          ctx.moveTo(verts[i][0], verts[i][1]);
+          ctx.lineTo(verts[j][0], verts[j][1]);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  // Draw Damping Pins
+  for (let p of state.pins) {
+    ctx.beginPath();
+    ctx.arc(CX + p.x * R, CY + p.y * R, 7, 0, Math.PI * 2);
+    ctx.fillStyle = pal.acc;
+    ctx.fill();
+  }
+  ctx.restore();
+  requestAnimationFrame(renderFrame);
+}
+
+// UI Bindings
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mode = btn.dataset.mode;
+  });
+});
+
+document.getElementById('micBtn').addEventListener('click', toggleMic);
+document.getElementById('synthBtn').addEventListener('click', toggleSynth);
+document.getElementById('scatterBtn').addEventListener('click', scatterParticles);
+document.getElementById('clearPinsBtn').addEventListener('click', () => state.pins = []);
+
+document.getElementById('freqSlider').addEventListener('input', e => {
+  state.freq = parseFloat(e.target.value);
+  document.getElementById('freqLbl').textContent = state.freq.toFixed(1) + ' Hz';
+  updateSynthFreqs();
+});
+document.getElementById('harmonicSelect').addEventListener('change', e => {
+  state.harmonicRatio = parseFloat(e.target.value);
+  updateSynthFreqs();
+});
+document.getElementById('beatSlider').addEventListener('input', e => {
+  state.beatHz = parseFloat(e.target.value);
+  document.getElementById('beatLbl').textContent = state.beatHz.toFixed(1) + ' Hz';
+  updateSynthFreqs();
+});
+document.getElementById('gainSlider').addEventListener('input', e => {
+  state.gain = parseFloat(e.target.value);
+  document.getElementById('gainLbl').textContent = state.gain.toFixed(1) + 'x';
+});
+document.getElementById('plateShape').addEventListener('change', e => state.plateShape = e.target.value);
+document.getElementById('paletteSelect').addEventListener('change', e => state.palette = e.target.value);
+document.getElementById('partSlider').addEventListener('input', e => {
+  numParticles = parseInt(e.target.value, 10);
+  document.getElementById('partLbl').textContent = numParticles.toLocaleString('da-DK');
+});
+document.getElementById('lockMode').addEventListener('change', e => state.lockMode = e.target.value);
+document.getElementById('nSlider').addEventListener('input', e => {
+  state.lockMode = 'manual';
+  document.getElementById('lockMode').value = 'manual';
+  state.n = parseInt(e.target.value, 10);
+  document.getElementById('nLbl').textContent = state.n;
+});
+document.getElementById('mSlider').addEventListener('input', e => {
+  state.lockMode = 'manual';
+  document.getElementById('lockMode').value = 'manual';
+  state.m = parseInt(e.target.value, 10);
+  document.getElementById('mLbl').textContent = state.m;
+});
+
+// Damping pins on doubleclick / shift-click
+canvas.addEventListener('dblclick', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * W;
+  const y = ((e.clientY - rect.top) / rect.height) * H;
+  if (state.pins.length >= 4) state.pins.shift();
+  state.pins.push({ x: (x - CX) / R, y: (y - CY) / R });
+});
+
+document.getElementById('snapBtn').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `kymatik-${Math.round(state.freq)}Hz-n${state.n}-m${state.m}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+requestAnimationFrame(renderFrame);
+</script>
+</body>
+</html>

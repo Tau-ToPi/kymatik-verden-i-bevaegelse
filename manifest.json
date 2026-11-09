@@ -1,0 +1,18 @@
+{
+  "short_name": "Kymatik",
+  "name": "Kymatik - Verden i Bevægelse",
+  "description": "Realtids akustisk kymatik-simulator med mikrofon, harmonisk drone-synthesizer, Chladni-sand, Faraday-bølger og 4D-projektion.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0d0f12",
+  "theme_color": "#d49b35",
+  "icons": [
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
